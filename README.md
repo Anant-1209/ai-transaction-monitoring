@@ -27,5 +27,5 @@ This project is a production-ready microservices system for monitoring transacti
 
 ## Getting Started
 1. Update `.env` with your `GEMINI_API_KEY`.
-2. Run `docker-compose up -d` to start the infrastructure.
-3. Follow the phase-by-phase implementation guide.
+2. Run `docker-compose up --build` to start the entire system.
+3. Open `http://localhost:4200` to view the dashboard.

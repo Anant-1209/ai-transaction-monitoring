@@ -1,6 +1,7 @@
 package com.fraud.detection.fraud.consumer;
 
 import com.fraud.detection.fraud.logic.FraudDetectionEngine;
+import com.fraud.detection.fraud.logic.FraudExplanationService;
 import com.fraud.detection.fraud.model.Transaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -30,24 +31,23 @@ public class TransactionConsumer {
         double score = engine.calculateRiskScore(transaction);
         transaction.riskScore = score;
         
-        if (score > 0.5) { // Any suspicious transaction gets an explanation
-            try {
-                transaction.fraudExplanation = aiService.explainFraud(transaction);
-                LOG.info("AI Explanation generated: " + transaction.fraudExplanation);
-            } catch (Exception e) {
-                LOG.error("Failed to generate AI explanation", e);
-                transaction.fraudExplanation = "AI analysis currently unavailable.";
-            }
+        // Always generate AI explanation for testing/demo purposes
+        try {
+            transaction.fraudExplanation = aiService.explainFraud(transaction);
+            LOG.info("AI Explanation generated: " + transaction.fraudExplanation);
+        } catch (Exception e) {
+            LOG.error("Failed to generate AI explanation", e);
+            transaction.fraudExplanation = "AI analysis currently unavailable.";
         }
 
-        if (score > 0.7) {
+        if (score > 0.5) {
             transaction.status = "FRAUD_FLAGGED";
         } else {
             transaction.status = "COMPLETED";
         }
 
-        // Save result
-        transaction.persist();
+        // Save result (use merge because the entity already has an ID from the transaction service)
+        Transaction.getEntityManager().merge(transaction);
 
         LOG.info("Analysis complete. Risk Score: " + score);
         return transaction; // Sent to fraud-alerts topic

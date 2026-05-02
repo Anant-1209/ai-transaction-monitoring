@@ -11,7 +11,7 @@ import org.eclipse.microprofile.reactive.messaging.Emitter;
 import java.util.List;
 
 @Path("/transactions")
-@Produces(MediaType.APPLICATION_BITSTREAM)
+@Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class TransactionResource {
 
@@ -25,15 +25,25 @@ public class TransactionResource {
     }
 
     @POST
-    @Transactional
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
     public Response create(Transaction transaction) {
-        transaction.status = TransactionStatus.PENDING;
-        transaction.persist();
+        // Force the DB to commit and CLOSE the connection immediately
+        io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
+            transaction.status = TransactionStatus.PENDING;
+            transaction.persist();
+        });
+
+        // Now that the DB is safe, send to Kafka
+        Transaction kafkaCopy = new Transaction();
+        kafkaCopy.id = transaction.id;
+        kafkaCopy.amount = transaction.amount;
+        kafkaCopy.merchant = transaction.merchant;
+        kafkaCopy.currency = transaction.currency;
+        kafkaCopy.customerId = transaction.customerId;
+        kafkaCopy.cardNumber = transaction.cardNumber;
+        kafkaCopy.timestamp = transaction.timestamp;
+        kafkaCopy.status = transaction.status;
         
-        // Send to Kafka for fraud analysis
-        transactionEmitter.send(transaction);
+        transactionEmitter.send(kafkaCopy);
         
         return Response.status(Response.Status.CREATED).entity(transaction).build();
     }

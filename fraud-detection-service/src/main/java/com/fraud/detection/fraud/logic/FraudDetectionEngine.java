@@ -9,9 +9,14 @@ public class FraudDetectionEngine {
     public Double calculateRiskScore(Transaction transaction) {
         double score = 0.0;
 
-        // Rule 1: High Amount
+        // Rule 1: High Amount (Over 10k)
         if (transaction.amount > 10000) {
             score += 0.4;
+        }
+        
+        // Rule 1b: Extreme Amount (Over 100k) - Instant High Risk
+        if (transaction.amount > 100000) {
+            score += 0.5;
         }
 
         // Rule 2: Specific Merchant (Simulating a blacklisted merchant)

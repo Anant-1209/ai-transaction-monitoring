@@ -21,7 +21,7 @@ public class Transaction extends PanacheEntity {
     public String customerId;
 
     public Transaction() {
-        this.timestamp = LocalDateTime.now();
+        this.timestamp = java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
         this.status = TransactionStatus.PENDING;
     }
 }

@@ -1,10 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { HttpClientModule } from '@angular/common/http';
-import { TransactionService } from './services/transaction.service';
-import { NotificationService } from './services/notification.service';
-import { Transaction, FraudAlert } from './models/transaction.model';
+import { HttpClient, HttpClientModule } from '@angular/common/http';
 
 @Component({
   selector: 'app-root',
@@ -14,63 +11,73 @@ import { Transaction, FraudAlert } from './models/transaction.model';
   styleUrls: ['./app.component.css']
 })
 export class AppComponent implements OnInit {
-  transactions: Transaction[] = [];
-  newTransaction: Transaction = {
-    amount: 0,
-    currency: 'USD',
-    merchant: '',
-    cardNumber: ''
-  };
+  transactions: any[] = [];
+  newTx = { merchant: '', amount: 0 };
+  selectedTx: any = null;
+  fraudCount = 0;
   
-  selectedTransaction: Transaction | null = null;
-  alerts: FraudAlert[] = [];
+  private socket: WebSocket | null = null;
+  private apiUrl = 'http://localhost:8080/transactions'; // Through Gateway
 
-  constructor(
-    private transactionService: TransactionService,
-    private notificationService: NotificationService
-  ) {}
+  constructor(private http: HttpClient) {}
 
   ngOnInit() {
     this.loadTransactions();
-    
-    // Listen for real-time fraud alerts
-    this.notificationService.getAlerts().subscribe(alert => {
-      this.alerts.unshift(alert);
-      // Update local transaction list if match found
-      const index = this.transactions.findIndex(t => t.id === alert.transactionId);
-      if (index !== -1) {
-        this.transactions[index].status = alert.status;
-        this.transactions[index].riskScore = alert.riskScore;
-        this.transactions[index].fraudExplanation = alert.fraudExplanation;
-      }
-    });
+    this.connectWebSocket();
   }
 
   loadTransactions() {
-    this.transactionService.getTransactions().subscribe(data => {
-      this.transactions = data.reverse();
+    this.http.get<any[]>(this.apiUrl).subscribe(data => {
+      this.transactions = data;
+      this.updateStats();
     });
   }
 
-  submitTransaction() {
-    this.transactionService.createTransaction(this.newTransaction).subscribe(res => {
-      this.transactions.unshift(res);
-      this.newTransaction = { amount: 0, currency: 'USD', merchant: '', cardNumber: '' };
+  connectWebSocket() {
+    // Connect to the Notification Service
+    this.socket = new WebSocket('ws://localhost:8083/alerts');
+    
+    this.socket.onmessage = (event) => {
+      const alert = JSON.parse(event.data);
+      // Map incoming alert data to transaction structure
+      const updatedTx = {
+        id: alert.transactionId,
+        merchant: alert.merchant,
+        amount: alert.amount,
+        riskScore: alert.riskScore,
+        status: alert.status,
+        fraudExplanation: alert.fraudExplanation
+      };
+
+      const index = this.transactions.findIndex(t => t.id === updatedTx.id);
+      if (index !== -1) {
+        // Create a new array reference to trigger Angular change detection
+        this.transactions[index] = updatedTx;
+        this.transactions = [...this.transactions];
+      } else {
+        this.transactions = [...this.transactions, updatedTx];
+      }
+      this.updateStats();
+    };
+
+    this.socket.onclose = () => {
+      setTimeout(() => this.connectWebSocket(), 3000);
+    };
+  }
+
+  createTransaction() {
+    this.http.post(this.apiUrl, this.newTx).subscribe((res: any) => {
+      this.transactions.push(res);
+      this.newTx = { merchant: '', amount: 0 };
+      this.updateStats();
     });
   }
 
-  viewDetails(t: Transaction) {
-    this.selectedTransaction = t;
+  updateStats() {
+    this.fraudCount = this.transactions.filter(t => t.status === 'FRAUD_FLAGGED').length;
   }
 
-  closeModal() {
-    this.selectedTransaction = null;
-  }
-
-  getRiskColor(score: number | undefined): string {
-    if (!score) return 'transparent';
-    if (score < 0.3) return '#22c55e';
-    if (score < 0.7) return '#f59e0b';
-    return '#ef4444';
+  showAiModal(tx: any) {
+    this.selectedTx = tx;
   }
 }
